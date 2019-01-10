@@ -192,8 +192,11 @@ def start(sandbox, stdin=None, download_target=None):
                 with open(outer_tar_fnm, 'wb') as f:
                     for chunk in bits:
                         f.write(chunk)
-                subprocess.check_output(['tar', '-xvf', outer_tar_fnm, '-C', download_target])
-                subprocess.check_output(['tar', '-xvf', inner_tar_fnm, '-C', download_target])
+                with open(os.devnull, 'w') as devnull:
+                    subprocess.run(['tar', '-xvf', outer_tar_fnm, '-C', download_target],
+                                   stdout=devnull, stderr=devnull)
+                    subprocess.run(['tar', '-xvf', inner_tar_fnm, '-C', download_target],
+                                   stdout=devnull, stderr=devnull)
                 os.remove(outer_tar_fnm)
                 os.remove(inner_tar_fnm)
             except Exception as e:

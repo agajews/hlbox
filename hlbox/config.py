@@ -1,4 +1,5 @@
 import tempfile
+import logging
 
 import structlog
 import structlog._config
@@ -58,6 +59,7 @@ def configure(profiles=None, docker_url=None):
     DOCKER_URL = docker_url
 
 
+logging.basicConfig(level=100)
 # structlog.is_configured() was added in 18.1
 if not structlog._config._CONFIG.is_configured:
     structlog.configure(
