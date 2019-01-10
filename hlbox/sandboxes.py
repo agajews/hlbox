@@ -1,7 +1,10 @@
 import io
 import tarfile
+import tempfile
 import time
 import uuid
+import os
+import subprocess
 from contextlib import contextmanager
 
 import structlog
@@ -140,7 +143,7 @@ def _create_sandbox_container(sandbox_id, image, command, limits, workdir=None,
     return c
 
 
-def start(sandbox, stdin=None):
+def start(sandbox, stdin=None, download_target=None):
     """Start a created sandbox container and wait for it to terminate.
 
     :param Sandbox sandbox: A sandbox to start.
@@ -180,6 +183,23 @@ def start(sandbox, stdin=None):
         raise exceptions.DockerError(str(e))
     else:
         log.info("Sandbox container exited")
+
+        if download_target is not None:
+            try:
+                bits, stat = sandbox.container.get_archive('/sandbox/all.tar')
+                outer_tar_fnm = os.path.join(download_target, 'all_outer.tar')
+                inner_tar_fnm = os.path.join(download_target, 'all.tar')
+                with open(outer_tar_fnm, 'wb') as f:
+                    for chunk in bits:
+                        f.write(chunk)
+                subprocess.check_output(['tar', '-xvf', outer_tar_fnm, '-C', download_target])
+                subprocess.check_output(['tar', '-xvf', inner_tar_fnm, '-C', download_target])
+                os.remove(outer_tar_fnm)
+                os.remove(inner_tar_fnm)
+            except Exception as e:
+                log.exception("Failed to fetch files")
+                raise exceptions.DockerError(str(e))
+
         state = utils.inspect_exited_container_state(sandbox.container)
         result.update(stdout=stdout, stderr=stderr, **state)
         if (utils.is_killed_by_sigkill_or_sigxcpu(state['exit_code']) and
@@ -208,7 +228,7 @@ def destroy(sandbox):
 
 
 def run(profile_name, command=None, files=None, stdin=None, limits=None,
-        workdir=None):
+        workdir=None, download_target=None):
     """Run a command in a new sandbox container and wait for it to finish
     running.  Destroy the sandbox when it has finished running.
 
@@ -220,9 +240,11 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     :raises DockerError: If an error occurred with the underlying
                          docker system.
     """
+    if download_target is not None:
+        command += ' && (tar -cvf all.tar * 2>&1 1>/dev/null)'
     with create(profile_name, command=command, files=files, limits=limits,
                 workdir=workdir) as sandbox:
-        return start(sandbox, stdin=stdin)
+        return start(sandbox, stdin=stdin, download_target=download_target)
 
 
 class _WorkingDirectory(object):
