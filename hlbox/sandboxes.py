@@ -14,7 +14,7 @@ __all__ = ['create', 'start', 'destroy', 'run', 'working_directory']
 
 logger = structlog.get_logger()
 
-_SANDBOX_NAME_PREFIX = 'epicbox-'
+_SANDBOX_NAME_PREFIX = 'hlbox-'
 
 
 class Sandbox:
@@ -245,7 +245,7 @@ class _WorkingDirectory(object):
 @contextmanager
 def working_directory():
     docker_client = utils.get_docker_client()
-    volume_name = 'epicbox-' + str(uuid.uuid4())
+    volume_name = 'hlbox-' + str(uuid.uuid4())
     log = logger.bind(volume=volume_name)
     log.info("Creating new docker volume for working directory")
     try:

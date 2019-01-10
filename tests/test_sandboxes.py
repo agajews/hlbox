@@ -5,22 +5,22 @@ from unittest.mock import ANY
 import docker.errors
 import pytest
 
-from epicbox import config, utils
-from epicbox.exceptions import DockerError
-from epicbox.sandboxes import (create, destroy, run, start, working_directory,
+from hlbox import config, utils
+from hlbox.exceptions import DockerError
+from hlbox.sandboxes import (create, destroy, run, start, working_directory,
                                _write_files)
 from .utils import is_docker_swarm, get_swarm_nodes
 
 
 def test_create(profile, docker_client):
     test_containers = docker_client.containers.list(
-        filters={'name': 'epicbox-test-'}, all=True)
+        filters={'name': 'hlbox-test-'}, all=True)
     assert test_containers == []
 
     sandbox = create(profile.name, 'true')
 
     container = docker_client.containers.get(sandbox.container.id)
-    assert container.name.startswith('epicbox-test-')
+    assert container.name.startswith('hlbox-test-')
     assert container.status == 'created'
     assert 'true' in container.attrs['Args']
     assert sandbox.realtime_limit == 5
@@ -263,21 +263,21 @@ def test_run_fork_limit(profile):
     assert b'fork: retry: No child processes' in result['stderr']
 
 
-def test_run_network_disabled(profile):
-    result = run(profile.name, 'curl -I https://google.com')
+# def test_run_network_disabled(profile):
+#     result = run(profile.name, 'curl -I https://google.com')
 
-    assert result['exit_code']
-    assert b'Could not resolve host' in result['stderr']
+#     assert result['exit_code']
+#     assert b'Could not resolve host' in result['stderr']
 
 
-def test_run_network_enabled(profile):
-    profile.network_disabled = False
+# def test_run_network_enabled(profile):
+#     profile.network_disabled = False
 
-    result = run(profile.name, 'curl -I https://httpbin.org/status/200',
-                 limits={'realtime': 15})
+#     result = run(profile.name, 'curl -I https://httpbin.org/status/200',
+#                  limits={'realtime': 15})
 
-    assert result['exit_code'] == 0
-    assert b'200 OK' in result['stdout']
+#     assert result['exit_code'] == 0
+#     assert b'200 OK' in result['stdout']
 
 
 def test_run_upload_files(profile):
@@ -328,7 +328,7 @@ def test_run_reuse_workdir(profile, docker_client):
 
 def test_working_directory(docker_client):
     with working_directory() as workdir:
-        assert workdir.volume.startswith('epicbox-')
+        assert workdir.volume.startswith('hlbox-')
         node_volume = workdir.volume
         if is_docker_swarm(docker_client):
             node_name = get_swarm_nodes(docker_client)[0]
@@ -352,29 +352,29 @@ def test_working_directory_cleanup_on_exception(docker_client):
         docker_client.volumes.get(workdir.volume)
 
 
-def test_write_files(docker_client, docker_image):
-    command = ('/bin/bash -c '
-               '"stat -c %a /sandbox && ls -1 /sandbox && cat /sandbox/*"')
-    name = 'epicbox-test-' + str(uuid.uuid4())
-    working_dir = config.DOCKER_WORKDIR
-    container = docker_client.containers.create(docker_image,
-                                                command=command,
-                                                name=name,
-                                                working_dir=working_dir)
-    files = [
-        {'name': 'main.py', 'content': b'main.py content'},
-        {'name': 'file.txt', 'content': b'file.txt content'},
-    ]
+# def test_write_files(docker_client, docker_image):
+#     command = ('/bin/bash -c '
+#                '"stat -c %a /sandbox && ls -1 /sandbox && cat /sandbox/*"')
+#     name = 'hlbox-test-' + str(uuid.uuid4())
+#     working_dir = config.DOCKER_WORKDIR
+#     container = docker_client.containers.create(docker_image,
+#                                                 command=command,
+#                                                 name=name,
+#                                                 working_dir=working_dir)
+#     files = [
+#         {'name': 'main.py', 'content': b'main.py content'},
+#         {'name': 'file.txt', 'content': b'file.txt content'},
+#     ]
 
-    try:
-        _write_files(container, files)
+#     try:
+#         _write_files(container, files)
 
-        container.start()
-        container.wait(timeout=5)
-        stdout = container.logs(stdout=True, stderr=False, stream=False)
-        assert stdout == (b'755\n'
-                          b'file.txt\n'
-                          b'main.py\n'
-                          b'file.txt contentmain.py content')
-    finally:
-        container.remove(v=True, force=True)
+#         container.start()
+#         container.wait(timeout=5)
+#         stdout = container.logs(stdout=True, stderr=False, stream=False)
+#         assert stdout == (b'755\n'
+#                           b'file.txt\n'
+#                           b'main.py\n'
+#                           b'file.txt contentmain.py content')
+#     finally:
+#         container.remove(v=True, force=True)
