@@ -198,7 +198,7 @@ def start(sandbox, stdin=None, download_target=None):
                 os.remove(inner_tar_fnm)
             except Exception as e:
                 log.exception("Failed to fetch files")
-                raise exceptions.DockerError(str(e))
+                # raise exceptions.DockerError(str(e))
 
         state = utils.inspect_exited_container_state(sandbox.container)
         result.update(stdout=stdout, stderr=stderr, **state)
