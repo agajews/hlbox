@@ -13,7 +13,7 @@ from requests.exceptions import RequestException
 
 from . import config, exceptions, utils
 
-__all__ = ['create', 'start', 'destroy', 'run', 'working_directory']
+__all__ = ['create', 'start', 'destroy', 'run', 'working_directory', 'runline']
 
 logger = structlog.get_logger()
 
@@ -31,6 +31,21 @@ class Sandbox:
         self.id_ = id_
         self.container = container
         self.realtime_limit = realtime_limit
+        self.docker_client = utils.get_docker_client(retry_status_forcelist=(404, 500))
+        self.started = False
+        params = {
+            # Attach to stdin even if there is nothing to send to it to be able
+            # to properly close it (stdin of the container is always open).
+            'stdin': 1,
+            'stdout': 1,
+            'stderr': 1,
+            'stream': 1,
+            'logs': 0,
+        }
+        self.sock = self.docker_client.api.attach_socket(container.id, params=params)
+        self.sock._sock.setblocking(False)  # Make socket non-blocking
+        # self.sock_file = os.fdopen(self.sock.fileno(), errors='backslashreplace')
+
 
     def __enter__(self):
         return self
@@ -143,7 +158,7 @@ def _create_sandbox_container(sandbox_id, image, command, limits, workdir=None,
     return c
 
 
-def start(sandbox, stdin=None, download_target=None):
+def start(sandbox, stdin=None, download_target=None, readline=False):
     """Start a created sandbox container and wait for it to terminate.
 
     :param Sandbox sandbox: A sandbox to start.
@@ -173,7 +188,7 @@ def start(sandbox, stdin=None, download_target=None):
     }
     try:
         stdout, stderr = utils.docker_communicate(
-            sandbox.container, stdin=stdin, timeout=sandbox.realtime_limit)
+            sandbox, stdin=stdin, timeout=sandbox.realtime_limit, readline=readline)
     except TimeoutError:
         log.info("Sandbox realtime limit exceeded",
                  limit=sandbox.realtime_limit)
@@ -213,6 +228,10 @@ def start(sandbox, stdin=None, download_target=None):
     return result
 
 
+def runline(sandbox, stdin=None):
+    return start(sandbox, stdin=stdin, download_target=None, readline=True)
+
+
 def destroy(sandbox):
     """Destroy a sandbox container.
 
@@ -222,6 +241,7 @@ def destroy(sandbox):
     :param Sandbox sandbox: A sandbox to destroy.
     """
     try:
+        sandbox.sock.close()
         sandbox.container.remove(v=True, force=True)
     except (RequestException, DockerException):
         logger.exception("Failed to destroy the sandbox container",
@@ -231,7 +251,7 @@ def destroy(sandbox):
 
 
 def run(profile_name, command=None, files=None, stdin=None, limits=None,
-        workdir=None, download_target=None):
+        workdir=None, download_target=None, readline=False):
     """Run a command in a new sandbox container and wait for it to finish
     running.  Destroy the sandbox when it has finished running.
 
@@ -247,7 +267,7 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
         command += ' && (tar -cvf all.tar * 2>&1 1>/dev/null)'
     with create(profile_name, command=command, files=files, limits=limits,
                 workdir=workdir) as sandbox:
-        return start(sandbox, stdin=stdin, download_target=download_target)
+        return start(sandbox, stdin=stdin, download_target=download_target, readline=readline)
 
 
 class _WorkingDirectory(object):

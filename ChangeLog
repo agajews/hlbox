@@ -1,0 +1,171 @@
+CHANGES
+=======
+
+* suppressing errors
+* fixed error handling
+* added support for fetching files off image
+* renamed
+
+1.0.0
+-----
+
+* bump version to 1.0.0
+* update dependencies docker-py -> docker in pyproject.tomp
+* remove base\_workdir argument from configure, it's a breaking change
+* migrate to docker library >=2, refactor to use high level docker API
+* Revert "add Python 3.7 to Travis test configuration"
+* add Python 3.7 to Travis test configuration
+* init CHANGELOG.rst with changes for 0.6.2 version
+* use poetry for development and packaging, leave pbr for compatibility
+
+0.6.2
+-----
+
+* fix docker volume cleanup if an exception is raised during its usage
+* Update README.md
+* update README
+* add travis badge to README
+* add travis configuration file .travis.yml
+* fix test\_run\_network\_enabled test
+* remove support for epicbox as a standalone RPC service
+* add MIT licence
+
+0.6.1
+-----
+
+* export create, start, destroy functions to global library scope
+
+0.6.0
+-----
+
+* add create, start, destroy sandbox actions and create/destroy context manager (#3)
+
+0.5.0
+-----
+
+* Use attach socket to write stdin and read stdout (#2)
+
+0.4.1
+-----
+
+* add connect retries for docker client
+
+0.4.0
+-----
+
+* add file\_size limit
+
+0.3.6
+-----
+
+* fix retry\_status\_forcelist param for docker client
+
+0.3.5
+-----
+
+* retry on 500 by default
+* fix network test in case network is slow
+* remove obsolete BASE\_WORKDIR config param
+* increate number of retries, docker logs by container name
+
+0.3.4
+-----
+
+* add retries on write\_files, inspect and start
+
+0.3.3
+-----
+
+* make create sandbox container more robust, refactor retries
+
+0.3.2
+-----
+
+* cache docker client instance, add retries for api requests
+
+0.3.1
+-----
+
+* replace docker logs implementation with fixed performance
+* remove selinux config option in README
+
+0.3.0
+-----
+
+* use docker volumes for workdirs, add support for swarm
+* update and not replace profiles on susequent configure calls
+* set memory-swap limit for sandboxes
+* remove selinux settings
+* add read\_only file system option to profile
+* make root to be the default user
+* use docker volumes for sandbox working directory
+
+0.2.3
+-----
+
+* move to docker-py 1.3.1
+
+0.2.2
+-----
+
+* use cleanup executable to clean working directory
+
+0.2.1
+-----
+
+* add IS\_CONFIGURED config option
+
+0.2
+---
+
+* fix reusing of working directory
+* accept json-like dict to configure epicbox
+* run command set in profile if command not specified
+* polish config
+* bump requirements versions, fix memory test
+* refactor start\_sandbox signature
+* add network\_disabled option
+* use docker ulimits for cpu, remove numprocs limit
+* update Dockerfile
+
+0.1.2
+-----
+
+* use own fork of oslo.messaging, change executor to threading
+* add set response timeout functions for rpc client
+
+0.1.1
+-----
+
+* remove version metadata from setup.cfg
+* change identification of race condition with devicemapper
+* handle race condition with devicemapper and udev
+
+0.1
+---
+
+* add functional tests for rpc client
+* update README, add configure to code snippet
+* Update README.md
+* update README, add brief Usage section
+* add setup files using pbr to make package
+* add Dockerfile and Makefile to build epicbox image
+* bump oslo.messaging required version
+* update SELINUX\_ENFORCED setting for docker
+* add docker requirements file
+* add docker settings
+* update base settings
+* fix tests, use stepic epicbox image
+* fix accidental typo in rpcserver.py
+* add rpcserver.py start script, update .gitignore
+* add rpc and rpcapi modules
+* add settings for rpc service
+* add minor comments
+* refactor exceptions handling
+* fix workdir handling when workdir is passed to run
+* set SELinux context for sandbox workdir
+* add ability to pass input to sandbox stdin
+* add compatibility with docker api <1.16
+* add upload files to sandbox support
+* add run method with cpu/memory/procs limits
+* Initial commit

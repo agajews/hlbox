@@ -117,6 +117,26 @@ def demultiplex_docker_stream(data):
     return b''.join(stdout_chunks), b''.join(stderr_chunks)
 
 
+def _socket_readline(sock):
+    try:
+        char = ''
+        data = b''
+        while char != '\n':  # TODO: do this faster?
+            char = os.read(sock.fileno(), 1)
+            # print('Got char ', char)
+            if not char:
+                break
+            # print('Data: ', data)
+            data += char
+
+    except EnvironmentError as e:
+        if e.errno in ERRNO_RECOVERABLE:
+            return data if data else b''
+        raise e
+    if data:
+        return data
+
+
 def _socket_read(sock, n=4096):
     """
     Read at most `n` bytes of data from the `sock` socket.
@@ -147,13 +167,13 @@ def _socket_write(sock, data):
         raise e
 
 
-def docker_communicate(container, stdin=None, start_container=True,
-                       timeout=None):
+def docker_communicate(sandbox, stdin=None, start_container=True,
+                       timeout=None, readline=False):
     """
     Interact with the container: Start it if required. Send data to stdin.
     Read data from stdout and stderr, until end-of-file is reached.
 
-    :param Container container: A container to interact with.
+    :param Sandbox sandbox: A sandbox to interact with.
     :param bytes stdin: The data to be sent to the standard input of the
                         container, or `None`, if no data should be sent.
     :param bool start_container: Whether to start the container after
@@ -168,40 +188,41 @@ def docker_communicate(container, stdin=None, start_container=True,
     :raise RequestException, DockerException, OSError: If an error occurred
         with the underlying docker system.
     """
+
     # Retry on 'No such container' since it may happen when the attach/start
     # is called immediately after the container is created.
-    docker_client = get_docker_client(retry_status_forcelist=(404, 500))
+    sock = sandbox.sock
+    docker_client = sandbox.docker_client
+    container = sandbox.container
     log = logger.bind(container=container)
-    params = {
-        # Attach to stdin even if there is nothing to send to it to be able
-        # to properly close it (stdin of the container is always open).
-        'stdin': 1,
-        'stdout': 1,
-        'stderr': 1,
-        'stream': 1,
-        'logs': 0,
-    }
-    sock = docker_client.api.attach_socket(container.id, params=params)
-    sock._sock.setblocking(False)  # Make socket non-blocking
-    log.info("Attached to the container", params=params, fd=sock.fileno(),
-             timeout=timeout)
-    if not stdin:
-        log.debug("There is no input data. Shut down the write half "
-                  "of the socket.")
-        sock._sock.shutdown(socket.SHUT_WR)
-    if start_container:
+
+    # if not stdin:
+    #     log.debug("There is no input data. Shut down the write half "
+    #               "of the socket.")
+    #     sock._sock.shutdown(socket.SHUT_WR)
+
+    if start_container and not sandbox.started:
         container.start()
+        sandbox.started = True
         log.info("Container started")
+
+    # print('Inputting', stdin)
 
     stream_data = b''
     start_time = time.time()
+    # print('Starting to wait')
     while timeout is None or time.time() - start_time < timeout:
         read_ready, write_ready, _ = select.select([sock], [sock], [], 1)
         is_io_active = False
         if read_ready:
+            # print('Reading')
             is_io_active = True
             try:
-                data = _socket_read(sock)
+                if readline:
+                    data = _socket_readline(sock)
+                else:
+                    data = _socket_read(sock)
+                # print('Got data:', repr(data))
             except ConnectionResetError:
                 log.warning("Connection reset caught on reading the container "
                             "output stream. Break communication")
@@ -210,8 +231,11 @@ def docker_communicate(container, stdin=None, start_container=True,
                 log.debug("Container output reached EOF. Closing the socket")
                 break
             stream_data += data
+            if readline:
+                break
 
         if write_ready and stdin:
+            # print('Writing')
             is_io_active = True
             try:
                 written = _socket_write(sock, stdin)
@@ -223,10 +247,11 @@ def docker_communicate(container, stdin=None, start_container=True,
                             "communication")
                 break
             stdin = stdin[written:]
-            if not stdin:
-                log.debug("All input data has been sent. Shut down the write "
-                          "half of the socket.")
-                sock._sock.shutdown(socket.SHUT_WR)
+
+            # if not stdin:
+            #     log.debug("All input data has been sent. Shut down the write "
+            #               "half of the socket.")
+            #     sock._sock.shutdown(socket.SHUT_WR)
 
         if not is_io_active:
             # Save CPU time
@@ -234,8 +259,11 @@ def docker_communicate(container, stdin=None, start_container=True,
     else:
         sock.close()
         raise TimeoutError("Container didn't terminate after timeout seconds")
-    sock.close()
-    return demultiplex_docker_stream(stream_data)
+
+    # sock.close()
+    res = demultiplex_docker_stream(stream_data)
+    # print('demultiplexed:', res)
+    return res
 
 
 def filter_filenames(files):
