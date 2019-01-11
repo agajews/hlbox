@@ -75,7 +75,7 @@ def create(profile_name, command=None, files=None, limits=None, workdir=None, pr
                          docker system.
     """
     if prep_download:
-        print('Prepping download')
+        # print('Prepping download')
         # command += ' && (tar -cvf all.tar * 2>&1 1>/dev/null)'
         command += ' && (tar -cvf all.tar * 1>&2)'
 
