@@ -13,7 +13,7 @@ from requests.exceptions import RequestException
 
 from . import config, exceptions, utils
 
-__all__ = ['create', 'start', 'destroy', 'run', 'working_directory', 'runline']
+__all__ = ['create', 'start', 'destroy', 'run', 'working_directory', 'runline', 'download']
 
 logger = structlog.get_logger()
 
@@ -46,7 +46,6 @@ class Sandbox:
         self.sock._sock.setblocking(False)  # Make socket non-blocking
         # self.sock_file = os.fdopen(self.sock.fileno(), errors='backslashreplace')
 
-
     def __enter__(self):
         return self
 
@@ -58,7 +57,7 @@ class Sandbox:
                                                    self.container.short_id)
 
 
-def create(profile_name, command=None, files=None, limits=None, workdir=None):
+def create(profile_name, command=None, files=None, limits=None, workdir=None, prep_download=False):
     """Create a new sandbox container without starting it.
 
     :param str profile_name: One of configured profile names.
@@ -75,6 +74,11 @@ def create(profile_name, command=None, files=None, limits=None, workdir=None):
     :raises DockerError: If an error occurred with the underlying
                          docker system.
     """
+    if prep_download:
+        print('Prepping download')
+        # command += ' && (tar -cvf all.tar * 2>&1 1>/dev/null)'
+        command += ' && (tar -cvf all.tar * 1>&2)'
+
     if profile_name not in config.PROFILES:
         raise ValueError("Profile not found: {0}".format(profile_name))
     if workdir is not None and not isinstance(workdir, _WorkingDirectory):
@@ -158,7 +162,7 @@ def _create_sandbox_container(sandbox_id, image, command, limits, workdir=None,
     return c
 
 
-def start(sandbox, stdin=None, download_target=None, readline=False):
+def start(sandbox, stdin=None, readline=False):
     """Start a created sandbox container and wait for it to terminate.
 
     :param Sandbox sandbox: A sandbox to start.
@@ -199,25 +203,6 @@ def start(sandbox, stdin=None, download_target=None, readline=False):
     else:
         log.info("Sandbox container exited")
 
-        if download_target is not None:
-            try:
-                bits, stat = sandbox.container.get_archive('/sandbox/all.tar')
-                outer_tar_fnm = os.path.join(download_target, 'all_outer.tar')
-                inner_tar_fnm = os.path.join(download_target, 'all.tar')
-                with open(outer_tar_fnm, 'wb') as f:
-                    for chunk in bits:
-                        f.write(chunk)
-                with open(os.devnull, 'w') as devnull:
-                    subprocess.run(['tar', '-xvf', outer_tar_fnm, '-C', download_target],
-                                   stdout=devnull, stderr=devnull)
-                    subprocess.run(['tar', '-xvf', inner_tar_fnm, '-C', download_target],
-                                   stdout=devnull, stderr=devnull)
-                os.remove(outer_tar_fnm)
-                os.remove(inner_tar_fnm)
-            except Exception as e:
-                log.exception("Failed to fetch files")
-                # raise exceptions.DockerError(str(e))
-
         state = utils.inspect_exited_container_state(sandbox.container)
         result.update(stdout=stdout, stderr=stderr, **state)
         if (utils.is_killed_by_sigkill_or_sigxcpu(state['exit_code']) and
@@ -228,8 +213,30 @@ def start(sandbox, stdin=None, download_target=None, readline=False):
     return result
 
 
+def download(sandbox, download_target):
+    try:
+        bits, stat = sandbox.container.get_archive('/sandbox/all.tar')
+        outer_tar_fnm = os.path.join(download_target, 'all_outer.tar')
+        inner_tar_fnm = os.path.join(download_target, 'all.tar')
+        with open(outer_tar_fnm, 'wb') as f:
+            for chunk in bits:
+                f.write(chunk)
+        with open(os.devnull, 'w') as devnull:
+            subprocess.run(['tar', '-xvf', outer_tar_fnm, '-C', download_target],
+                            stdout=devnull, stderr=devnull)
+            subprocess.run(['tar', '-xvf', inner_tar_fnm, '-C', download_target],
+                            stdout=devnull, stderr=devnull)
+        os.remove(outer_tar_fnm)
+        os.remove(inner_tar_fnm)
+    except Exception as e:
+        print(e)
+        raise e
+        # log.exception("Failed to fetch files")
+        # raise exceptions.DockerError(str(e))
+
+
 def runline(sandbox, stdin=None):
-    return start(sandbox, stdin=stdin, download_target=None, readline=True)
+    return start(sandbox, stdin=stdin, readline=True)
 
 
 def destroy(sandbox):
@@ -251,7 +258,7 @@ def destroy(sandbox):
 
 
 def run(profile_name, command=None, files=None, stdin=None, limits=None,
-        workdir=None, download_target=None, readline=False):
+        workdir=None, readline=False):
     """Run a command in a new sandbox container and wait for it to finish
     running.  Destroy the sandbox when it has finished running.
 
@@ -263,11 +270,9 @@ def run(profile_name, command=None, files=None, stdin=None, limits=None,
     :raises DockerError: If an error occurred with the underlying
                          docker system.
     """
-    if download_target is not None:
-        command += ' && (tar -cvf all.tar * 2>&1 1>/dev/null)'
     with create(profile_name, command=command, files=files, limits=limits,
                 workdir=workdir) as sandbox:
-        return start(sandbox, stdin=stdin, download_target=download_target, readline=readline)
+        return start(sandbox, stdin=stdin, readline=readline)
 
 
 class _WorkingDirectory(object):
